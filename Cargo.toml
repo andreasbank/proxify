@@ -1,0 +1,17 @@
+[package]
+name = "proxify"
+version = "0.1.0"
+authors = ["Andreas Bank <andreas.mikael.bank@gmail.com>"]
+edition = "2021"
+
+[profile.release]
+strip = "symbols"
+
+[dependencies]
+clap = { version = "4.4.11", features = ["cargo", "derive"] }
+once_cell = "1.19.0"
+
+[[example]]
+name = "test_client"
+test = false
+bench = false
