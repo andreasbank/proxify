@@ -1,7 +1,9 @@
-use std::sync::{Mutex};
 use std::error::Error;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use clap::{arg, command};
 use once_cell::sync::Lazy;
+use ctrlc;
 
 use proxify::common::verbose_print::{VerbosityLevel, Verbosity};
 use proxify::{Error, Inform, Detail, Spam};
@@ -11,13 +13,23 @@ mod config;
 use config::ProxifyConfig;
 
 static VERBOSITY: Lazy<Mutex<Verbosity>> = Lazy::new(|| Mutex::new(Verbosity::new()));
+static exiting: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut listener = ProxifyDaemon::new(&"127.0.0.1".to_string(), 65432).unwrap();
     let cmd_args = command!().args(&[
         arg!(-d --debug <lvl> "Enable debug at a certain level"),
         arg!(-c --config <string> "Start listening for proxify data with the given configuration"),
     ]).get_matches();
+
+    {
+        /* Handle CTRL-C sigterm */
+        let exiting_clone = exiting.clone();
+        ctrlc::set_handler(move || {
+            Inform!("Caught sigterm, exiting...");
+            exiting_clone.store(true, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl+C handler");
+    }
 
     // Remove'_' from _dbg_lvl when this is used
     let dbg_lvl = match cmd_args.get_one::<String>("debug") {
@@ -48,14 +60,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     Detail!("Command line configuration string: '{}'", arg_conf);
 
-    let conf = ProxyfyConfig::new(arg_conf);
-    Inform!("Configuration: '{}'", arg_conf);
+    let conf = ProxifyConfig::new(arg_conf);
+    Inform!("Configuration: '{}'", "<TODO>");
+
+    let mut listener = ProxifyDaemon::new(&"127.0.0.1".to_string(),
+                                          65432).unwrap();
 
     Inform!("Listening on port 65432");
-    listener.start()?;
-
-    // This will never be reached
-    listener.stop();
+    listener.start(once_cell::sync::Lazy::<Arc<AtomicBool>>::get(&exiting).unwrap())?;
 
     Ok(())
 }
