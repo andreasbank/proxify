@@ -1,10 +1,11 @@
 use std::thread;
 use std::string::String;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::result::Result;
-use std::io::{ErrorKind, Read, Write};
-use std::net::{TcpListener, TcpStream, Shutdown};
+use std::io::{Read, Write};
+use std::net::{IpAddr, TcpListener, TcpStream, Shutdown};
 use std::time::Duration;
 
 use proxify::common::verbose_print::VerbosityLevel;
@@ -27,11 +28,15 @@ impl Drop for ProxifyDaemon {
 }
 
 impl ProxifyDaemon {
-    pub fn new(addr: &String, port: u16) -> Result<Self, &'static str> {
+    pub fn new(addr: &String, port: u16) -> Result<Self, String> {
         if port < 100 {
-            return Err("Invalid port");
+            return Err(format!("Invalid port {}", port));
         }
-        // TODO: also validate address
+
+        match IpAddr::from_str(addr.as_str()) {
+            Ok(_) => (),
+            Err(_) => return Err(format!("Invalid IP address {}", addr)),
+        }
 
         Ok(ProxifyDaemon {
             addr: addr.clone(),
@@ -63,15 +68,8 @@ impl ProxifyDaemon {
                         Self::handle_accept(stream, exiting_clone, nr_threads_clone)
                     });
                 }
-                //None => {
-                //    /* No connection, lets sleep for 1 second */
-                //    thread::sleep(Duration::from_secs(1));
-                //}
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    /* Blocking, continue loop */
-                }
                 Err(e) => {
-                    println!("Error: {}", e);
+                    Error!("Failed to accept incoming connection: {}", e);
                 }
             }
         }
@@ -121,7 +119,6 @@ impl ProxifyDaemon {
 
                 Err(_) => {
                     Error!("An error occurred, terminating connection with {}", stream.peer_addr().unwrap());
-                    stream.shutdown(Shutdown::Both).unwrap();
                     break;
                 }
             }

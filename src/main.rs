@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use clap::{arg, command};
@@ -21,22 +22,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         arg!(-c --config <string> "Start listening for proxify data with the given configuration"),
     ]).get_matches();
 
-    {
-        /* Handle CTRL-C sigterm */
-        let exiting_clone = exiting.clone();
-        ctrlc::set_handler(move || {
-            Inform!("Caught sigterm, exiting...");
-            exiting_clone.store(true, Ordering::SeqCst);
-        })
-        .expect("Error setting Ctrl+C handler");
-    }
-
-    // Remove'_' from _dbg_lvl when this is used
     let dbg_lvl = match cmd_args.get_one::<String>("debug") {
         Some(v) => match String::from(v).trim().parse::<u32>() {
-            Ok(n) => {
-                n
-            },
+            Ok(n) => n,
             Err(_e) => 0, // Move this error checking to the command!().
         },
         None => 0,
@@ -63,8 +51,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     let conf = ProxifyConfig::new(arg_conf);
     Inform!("Configuration: '{}'", "<TODO>");
 
-    let mut listener = ProxifyDaemon::new(&"127.0.0.1".to_string(),
-                                          65432).unwrap();
+    // TODO: when conf works, take from conf instead
+    let local_addr = String::from("127.0.0.1");
+    let local_port = 65432;
+
+    let mut listener = match ProxifyDaemon::new(&local_addr, local_port) {
+        Ok(lis) => lis,
+        Err(e) => {
+            return Err(e.into());
+        }
+    };
+
+    {
+        /* Handle CTRL-C sigterm */
+        let exiting_clone = exiting.clone();
+        ctrlc::set_handler(move || {
+            Inform!("Caught sigterm, exiting...");
+            exiting_clone.store(true, Ordering::SeqCst);
+            /* We connect to the listening server to wake it up and see that we are exiting */
+            let _ = TcpStream::connect((local_addr.as_str(), local_port));
+        })
+        .expect("Error setting Ctrl+C handler");
+    }
 
     Inform!("Listening on port 65432");
     listener.start(once_cell::sync::Lazy::<Arc<AtomicBool>>::get(&exiting).unwrap())?;
