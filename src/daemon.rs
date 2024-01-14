@@ -12,12 +12,15 @@ use proxify::common::verbose_print::VerbosityLevel;
 use proxify::{Error, Inform, Detail, Spam};
 use proxify::common::utils::encode_hex;
 use crate::VERBOSITY;
+use crate::config::ProxifyConfig;
+use proxify::proxy_conn::ProxyConn;
 
 static MAGIC_BYTES: [u8; 4] = [ 0xAB, 0xBA, 0xAB, 0xBA ];
 
 pub struct ProxifyDaemon {
     addr: String,
     port: u16,
+    nr_of_proxies: u16,
 }
 
 /* Destructor */
@@ -41,13 +44,22 @@ impl ProxifyDaemon {
         Ok(ProxifyDaemon {
             addr: addr.clone(),
             port: port,
+            nr_of_proxies: 20,
         })
     }
 
+    pub fn prepare_proxies(&mut self) {
+        // TODO: Write code that prepares a number of proxies
+        Detail!("Preparing {} number of proxies", self.nr_of_proxies);
+    }
+
     pub fn start(&mut self, exiting: &Arc<AtomicBool>) -> std::io::Result<()>{
+        self.prepare_proxies();
         let listener = TcpListener::bind((self.addr.as_str(), self.port)).unwrap();
         let nr_threads: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 
+        /* More on a proper implementation of TcpListener::incoming():
+           https://stackoverflow.com/questions/56692961/graceful-exit-tcplistener-incoming */
         for stream in listener.incoming() {
             if exiting.load(Ordering::Relaxed) {
                 /* If the application is exiting break the loop */
@@ -109,6 +121,12 @@ impl ProxifyDaemon {
                     /* echo the data */
                     Detail!("Sending data back");
                     stream.write(&data[4..size]).unwrap();
+
+                    // TODO: parse proxify data struct
+                    // TODO: if command is do_request with new session, get new proxy
+                    // TODO: do request with given data
+                    // TODO: write back data to stream
+
                 },
 
                 /* If we received 0 bytes, we're done */
@@ -125,5 +143,4 @@ impl ProxifyDaemon {
         }
         *nr_threads.lock().unwrap() -= 1;
     }
-
 }

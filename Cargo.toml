@@ -10,6 +10,7 @@ strip = "symbols"
 [dependencies]
 clap = { version = "4.4.11", features = ["cargo", "derive"] }
 ctrlc = "3.4.2"
+curl = "0.4.44"
 once_cell = "1.19.0"
 
 [[example]]
