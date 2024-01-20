@@ -14,7 +14,7 @@ mod config;
 use config::ProxifyConfig;
 
 static VERBOSITY: Lazy<Mutex<Verbosity>> = Lazy::new(|| Mutex::new(Verbosity::new()));
-static exiting: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
+static EXITING: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cmd_args = command!().args(&[
@@ -51,11 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let conf = ProxifyConfig::new(&arg_conf)?;
     Inform!("Configuration: '{}'", "<TODO>");
 
-    // TODO: when conf works, take from conf instead
-    let local_addr = String::from("127.0.0.1");
-    let local_port = 65432;
-
-    let mut listener = match ProxifyDaemon::new(&local_addr, local_port) {
+    let mut listener = match ProxifyDaemon::new(conf) {
         Ok(lis) => lis,
         Err(e) => {
             return Err(e.into());
@@ -64,18 +60,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     {
         /* Handle CTRL-C sigterm */
-        let exiting_clone = exiting.clone();
+        let exiting_clone = EXITING.clone();
+        let listener_addr = listener.get_bind_addr().clone();
+        let listener_port = listener.get_bind_port();
         ctrlc::set_handler(move || {
             Inform!("Caught sigterm, exiting...");
             exiting_clone.store(true, Ordering::SeqCst);
             /* We connect to the listening server to wake it up and see that we are exiting */
-            let _ = TcpStream::connect((local_addr.as_str(), local_port));
+            let _ = TcpStream::connect((listener_addr.as_str(), listener_port));
         })
         .expect("Error setting Ctrl+C handler");
     }
 
-    Inform!("Listening on {}:{}", conf.bind_addr, conf.bind_port);
-    listener.start(once_cell::sync::Lazy::<Arc<AtomicBool>>::get(&exiting).unwrap())?;
+    Inform!("Listening on {}:{}", listener.get_bind_addr(), listener.get_bind_port());
+    listener.start(once_cell::sync::Lazy::<Arc<AtomicBool>>::get(&EXITING).unwrap())?;
 
     Ok(())
 }

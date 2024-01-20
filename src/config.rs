@@ -1,4 +1,4 @@
-use proxify::common::utils;
+use proxify::common::utils::{validate_ip_address, validate_port};
 use proxify::{Error, Inform, Detail, Spam};
 use proxify::common::verbose_print::VerbosityLevel;
 use crate::VERBOSITY;
@@ -42,7 +42,18 @@ impl<'a> ProxifyConfig {
         let pairs = Self::parse_keyvals(config_str);
 
         let bind_addr = Self::get_value_from_key(&pairs, "bind_addr").unwrap_or("127.0.0.1").to_string();
-        let bind_port = Self::get_value_from_key(&pairs, "bind_port").unwrap_or("65432").to_string().trim().parse::<u16>().unwrap();
+        let bind_port = match Self::get_value_from_key(&pairs, "bind_port").unwrap_or("65432").to_string().trim().parse::<u16>() {
+            Ok(port) => port,
+            Err(_) => 0
+        };
+
+        if !validate_ip_address(&bind_addr) {
+            return Err("Invalid IP address");
+        }
+
+        if !validate_port(bind_port) {
+            return Err("Invalid port specified");
+        }
 
         Ok(ProxifyConfig {
             bind_addr: bind_addr,

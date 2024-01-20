@@ -1,6 +1,5 @@
 use std::thread;
 use std::string::String;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::result::Result;
@@ -31,21 +30,20 @@ impl Drop for ProxifyDaemon {
 }
 
 impl ProxifyDaemon {
-    pub fn new(addr: &String, port: u16) -> Result<Self, String> {
-        if port < 100 {
-            return Err(format!("Invalid port {}", port));
-        }
-
-        match IpAddr::from_str(addr.as_str()) {
-            Ok(_) => (),
-            Err(_) => return Err(format!("Invalid IP address {}", addr)),
-        }
-
+    pub fn new(config: ProxifyConfig) -> Result<Self, String> {
         Ok(ProxifyDaemon {
-            bind_addr: addr.clone(),
-            bind_port: port,
+            bind_addr: config.bind_addr,
+            bind_port: config.bind_port,
             nr_of_proxies: 20,
         })
+    }
+
+    pub fn get_bind_addr(&self) -> &String {
+        &self.bind_addr
+    }
+
+    pub fn get_bind_port(&self) -> u16{
+        self.bind_port
     }
 
     pub fn prepare_proxies(&mut self) {

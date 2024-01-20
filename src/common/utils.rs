@@ -1,4 +1,6 @@
 use std::{fmt::Write as FmtWrite, num::ParseIntError};
+use std::net::IpAddr;
+use std::str::FromStr;
 
 pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
     (0..s.len())
@@ -15,11 +17,16 @@ pub fn encode_hex(bytes: &[u8]) -> String {
     hex
 }
 
-pub fn parse_address(config_str: &String) -> String {
-    let addr = match config_str.rfind("addr=") {
-        Some(a) => &config_str[a..config_str.find(",").unwrap()],
-        None => "0.0.0.0"
-    };
+pub fn validate_port(port: u16) -> bool{
+    if port < 100 {
+        return false;
+    }
+    true
+}
 
-    String::from(addr)
+pub fn validate_ip_address(ip_addr: &String) -> bool {
+    match IpAddr::from_str(ip_addr.as_str()) {
+        Ok(_) => return true,
+        Err(_) => return false
+    }
 }
