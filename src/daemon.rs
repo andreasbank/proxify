@@ -19,7 +19,7 @@ static MAGIC_BYTES: [u8; 4] = [ 0xAB, 0xBA, 0xAB, 0xBA ];
 pub struct ProxifyDaemon {
     bind_addr: String,
     bind_port: u16,
-    nr_of_proxies: u16,
+    nr_of_proxies: u8,
 }
 
 /* Destructor */
@@ -34,7 +34,7 @@ impl ProxifyDaemon {
         Ok(ProxifyDaemon {
             bind_addr: config.bind_addr,
             bind_port: config.bind_port,
-            nr_of_proxies: 20,
+            nr_of_proxies: config.nr_of_proxies,
         })
     }
 
