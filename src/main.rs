@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     Detail!("Command line configuration string: '{}'", arg_conf);
 
-    let conf = ProxifyConfig::new(arg_conf);
+    let conf = ProxifyConfig::new(&arg_conf)?;
     Inform!("Configuration: '{}'", "<TODO>");
 
     // TODO: when conf works, take from conf instead
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Error setting Ctrl+C handler");
     }
 
-    Inform!("Listening on port 65432");
+    Inform!("Listening on {}:{}", conf.bind_addr, conf.bind_port);
     listener.start(once_cell::sync::Lazy::<Arc<AtomicBool>>::get(&exiting).unwrap())?;
 
     Ok(())

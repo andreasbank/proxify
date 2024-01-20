@@ -18,8 +18,8 @@ use proxify::proxy_conn::ProxyConn;
 static MAGIC_BYTES: [u8; 4] = [ 0xAB, 0xBA, 0xAB, 0xBA ];
 
 pub struct ProxifyDaemon {
-    addr: String,
-    port: u16,
+    bind_addr: String,
+    bind_port: u16,
     nr_of_proxies: u16,
 }
 
@@ -42,8 +42,8 @@ impl ProxifyDaemon {
         }
 
         Ok(ProxifyDaemon {
-            addr: addr.clone(),
-            port: port,
+            bind_addr: addr.clone(),
+            bind_port: port,
             nr_of_proxies: 20,
         })
     }
@@ -55,7 +55,7 @@ impl ProxifyDaemon {
 
     pub fn start(&mut self, exiting: &Arc<AtomicBool>) -> std::io::Result<()>{
         self.prepare_proxies();
-        let listener = TcpListener::bind((self.addr.as_str(), self.port)).unwrap();
+        let listener = TcpListener::bind((self.bind_addr.as_str(), self.bind_port)).unwrap();
         let nr_threads: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 
         /* More on a proper implementation of TcpListener::incoming():
@@ -88,6 +88,7 @@ impl ProxifyDaemon {
         Ok(())
     }
 
+    /* A very simple check to ensure the client is compatible */
     fn authenticate(data: &[u8]) -> Result<(), &'static str> {
         Spam!("Magic bytes received: {}", encode_hex(data));
         if MAGIC_BYTES == data { return Ok(()); }
