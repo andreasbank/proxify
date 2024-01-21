@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let conf = ProxifyConfig::new(&arg_conf)?;
     Inform!("Configuration: '{}'", "<TODO>");
 
-    let mut listener = match ProxifyDaemon::new(conf) {
+    let mut listener: ProxifyDaemon = match ProxifyDaemon::new(conf) {
         Ok(lis) => lis,
         Err(e) => {
             return Err(e.into());

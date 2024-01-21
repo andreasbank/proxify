@@ -1,11 +1,12 @@
 use std::thread;
 use std::string::String;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Condvar};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::result::Result;
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream, Shutdown};
 use std::time::Duration;
+use std::collections::VecDeque;
 
 use proxify::common::verbose_print::VerbosityLevel;
 use proxify::{Error, Inform, Detail, Spam};
@@ -20,6 +21,11 @@ pub struct ProxifyDaemon {
     bind_addr: String,
     bind_port: u16,
     nr_of_proxies: u8,
+    /* To clarify the following 3 variables: A ref-counted thread-safe list
+       containing ref-counted thread-safe elements */
+    notready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+    ready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+    inuse_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
 }
 
 /* Destructor */
@@ -35,6 +41,9 @@ impl ProxifyDaemon {
             bind_addr: config.bind_addr,
             bind_port: config.bind_port,
             nr_of_proxies: config.nr_of_proxies,
+            notready_proxies: Arc::new(Mutex::new(VecDeque::new())),
+            ready_proxies: Arc::new(Mutex::new(VecDeque::new())),
+            inuse_proxies: Arc::new(Mutex::new(VecDeque::new())),
         })
     }
 
@@ -46,15 +55,53 @@ impl ProxifyDaemon {
         self.bind_port
     }
 
-    pub fn prepare_proxies(&mut self) {
-        // TODO: Write code that prepares a number of proxies
-        Detail!("Preparing {} number of proxies", self.nr_of_proxies);
+    pub fn get_ready_proxy(&self) -> Option<Arc<Mutex<ProxyConn>>> {
+       let mut r_proxies = self.ready_proxies.lock().unwrap();
+        if r_proxies.is_empty() {
+            Inform!("No proxies are ready yet.");
+            return None;
+        }
+        let mut proxy = r_proxies.pop_front().unwrap();
+        drop(r_proxies); // Am I dropping the Mutex or the Arc<Mutex<VecDeque<...>>>?
+        let mut u_proxies = self.inuse_proxies.lock().unwrap();
+        u_proxies.push_back(proxy.clone());
+        Some(proxy)
+    }
+
+    /* Run in a separate thread */
+    pub fn prepare_proxies(notready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+                           ready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+                           inuse_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+                           exiting: Arc<AtomicBool>) {
+        Detail!("Starting to prepare proxies");
+        while !exiting.load(Ordering::Relaxed) {
+            Detail!("Preparing one proxy");
+            /*  TODO:
+                Process flow:
+                Loop inuse and try_lock, if success then push_back to unused
+                then if nr_proxies not reached pop_first from notready, make ready
+                then push_back to ready_proxies
+             */
+            thread::sleep(Duration::from_secs(1));
+        }
     }
 
     pub fn start(&mut self, exiting: &Arc<AtomicBool>) -> std::io::Result<()>{
-        self.prepare_proxies();
         let listener = TcpListener::bind((self.bind_addr.as_str(), self.bind_port)).unwrap();
         let nr_threads: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+
+        /* Kick off a thread that will keep proxies prepared */
+        Detail!("Preparing {} number of proxies", self.nr_of_proxies);
+        let exiting_clone = exiting.clone();
+        let notready_proxies_clone = self.notready_proxies.clone();
+        let ready_proxies_clone = self.ready_proxies.clone();
+        let inuse_proxies_clone = self.inuse_proxies.clone();
+        let proxies_thread = thread::spawn(move || {
+            Self::prepare_proxies(notready_proxies_clone,
+                                  ready_proxies_clone,
+                                  inuse_proxies_clone,
+                                  exiting_clone);
+        });
 
         /* More on a proper implementation of TcpListener::incoming():
            https://stackoverflow.com/questions/56692961/graceful-exit-tcplistener-incoming */
@@ -83,6 +130,7 @@ impl ProxifyDaemon {
                 }
             }
         }
+        proxies_thread.join().unwrap();
         Ok(())
     }
 
@@ -120,6 +168,7 @@ impl ProxifyDaemon {
                     /* echo the data */
                     Detail!("Sending data back");
                     stream.write(&data[4..size]).unwrap();
+                    
 
                     // TODO: parse proxify data struct
                     // TODO: if command is do_request with new session, get new proxy
