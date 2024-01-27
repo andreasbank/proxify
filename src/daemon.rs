@@ -13,7 +13,8 @@ use proxify::{Error, Inform, Detail, Spam};
 use proxify::common::utils::encode_hex;
 use crate::VERBOSITY;
 use crate::config::ProxifyConfig;
-use proxify::proxy_conn::ProxyConn;
+use crate::proxy_conn::ProxyConn;
+use crate::proxy_conn::ProxyConnProtocol;
 
 static MAGIC_BYTES: [u8; 4] = [ 0xAB, 0xBA, 0xAB, 0xBA ];
 
@@ -37,6 +38,20 @@ impl Drop for ProxifyDaemon {
 
 impl ProxifyDaemon {
     pub fn new(config: ProxifyConfig) -> Result<Self, String> {
+        let mut proxies_list: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>> =
+            Arc::new(Mutex::new(VecDeque::new()));
+
+        let mut proxies_locked = proxies_list.lock().unwrap();
+        //for p in config.proxies {
+            (*proxies_locked).push_back(Arc::new(Mutex::new(
+                ProxyConn::new(
+                    ProxyConnProtocol::HTTP,
+                    String::from("localhost"),
+                    80_u16,
+                )
+            )));
+        //}
+
         Ok(ProxifyDaemon {
             bind_addr: config.bind_addr,
             bind_port: config.bind_port,
@@ -61,7 +76,7 @@ impl ProxifyDaemon {
             Inform!("No proxies are ready yet.");
             return None;
         }
-        let mut proxy = r_proxies.pop_front().unwrap();
+        let proxy = r_proxies.pop_front().unwrap();
         drop(r_proxies); // Am I dropping the Mutex or the Arc<Mutex<VecDeque<...>>>?
         let mut u_proxies = self.inuse_proxies.lock().unwrap();
         u_proxies.push_back(proxy.clone());
@@ -75,13 +90,15 @@ impl ProxifyDaemon {
                            exiting: Arc<AtomicBool>) {
         Detail!("Starting to prepare proxies");
         while !exiting.load(Ordering::Relaxed) {
-            Detail!("Preparing one proxy");
+            Spam!("In prepare proxy loop");
+            
             /*  TODO:
                 Process flow:
                 Loop inuse and try_lock, if success then push_back to unused
                 then if nr_proxies not reached pop_first from notready, make ready
                 then push_back to ready_proxies
              */
+            
             thread::sleep(Duration::from_secs(1));
         }
     }
@@ -156,10 +173,10 @@ impl ProxifyDaemon {
                         match Self::authenticate(&data[0..MAGIC_BYTES.len()]) {
                             Ok(_) => {
                                 authenticated = true;
-                                println!("Authentication successful");
+                                Inform!("Authentication successful");
                             }
                             Err(errstr) => {
-                                println!("Failed to authenticate: {}", errstr);
+                                Error!("Failed to authenticate: {}", errstr);
                                 break;
                             }
                         }
