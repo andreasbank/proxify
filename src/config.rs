@@ -45,15 +45,18 @@ impl<'a> ProxifyConfig {
         None
     }
 
-    pub fn parse_config(config_str: &'a String) -> Result<ProxifyConfig, &'static str> {
+    pub fn parse_config(config_str: &'a String) -> Result<ProxifyConfig, String> {
         let pairs = Self::parse_keyvals(config_str);
+
         let bind_addr = Self::get_value_from_key(&pairs, "bind_addr")
             .unwrap_or(DEFAULT_BIND_ADDR)
             .to_string();
+
         let bind_port = match Self::get_value_from_key(&pairs, "bind_port") {
             Some(v) => v.to_string().trim().parse::<u16>().unwrap_or(0),
             None => DEFAULT_BIND_PORT
         };
+
         let nr_of_proxies = match Self::get_value_from_key(&pairs, "nr_proxies") {
             Some(v) => match v.to_string().trim().parse::<u8>() {
                 Ok(v) if v < MIN_NR_PROXIES => 0,
@@ -63,16 +66,28 @@ impl<'a> ProxifyConfig {
             None => DEFAULT_NR_PROXIES
         };
 
+        let proxies_file = Self::get_value_from_key(&pairs, "proxies_file")
+            .unwrap_or("proxies.json")
+            .to_string();
+
+
         if !validate_ip_address(&bind_addr) {
-            return Err("Invalid IP address");
+            return Err(String::from("Invalid IP address"));
         }
 
         if !validate_port(bind_port) {
-            return Err("Invalid port specified");
+            return Err(String::from("Invalid port specified"));
         }
 
         if nr_of_proxies < 1 || nr_of_proxies > MAX_NR_PROXIES {
-            return Err("Invalid nr_of_proxies");
+            return Err(String::from("Invalid nr_of_proxies"));
+        }
+
+        let proxies_list = match parse_proxies_file(proxies_file) {
+            Ok(list) => list,
+            Err(e) => return Err("Failed to parse proxies file ({}): {}",
+                                 proxies_file,
+                                 e.to_string()),
         }
 
         Ok(ProxifyConfig {
@@ -80,5 +95,11 @@ impl<'a> ProxifyConfig {
             bind_port: bind_port,
             nr_of_proxies: nr_of_proxies,
         })
+    }
+
+    fn parse_proxies_file(proxies_file: String) -> Result<Vec<(String, String, u16)>, String> {
+        let list: Vec<(String, String, u16)> = Vec::new();
+
+        
     }
 }
