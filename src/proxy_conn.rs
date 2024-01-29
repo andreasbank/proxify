@@ -48,9 +48,8 @@ impl ProxyConn {
     }
 
     pub fn prepare(&self) {
-        // TODO: curl::init() in main thread before any use
-        // TODO: Add error handling to all unwraps
         /*
+        // TODO: Add error handling to all unwraps
         curl_handler.url("https://amazon.se/").unwrap();
         curl_handler.write_function(|data| {
             stdout().write_all(data).unwrap();

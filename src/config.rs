@@ -1,3 +1,4 @@
+use std::fs::read_to_string;
 use proxify::common::utils::{validate_ip_address, validate_port};
 use proxify::{Error, Inform, Detail, Spam};
 use proxify::common::verbose_print::VerbosityLevel;
@@ -13,10 +14,11 @@ pub struct ProxifyConfig {
     pub bind_addr: String,
     pub bind_port: u16,
     pub nr_of_proxies: u8,
+    pub proxies_list: Vec<(String, String, u16)>,
 }
 
 impl<'a> ProxifyConfig {
-    pub fn new(config_string: &'a String) -> Result<Self, &'static str> {
+    pub fn new(config_string: &'a String) -> Result<Self, String> {
         Self::parse_config(config_string)
     }
 
@@ -83,23 +85,47 @@ impl<'a> ProxifyConfig {
             return Err(String::from("Invalid nr_of_proxies"));
         }
 
-        let proxies_list = match parse_proxies_file(proxies_file) {
+        let proxies_list = match Self::parse_proxies_file(&proxies_file) {
             Ok(list) => list,
-            Err(e) => return Err("Failed to parse proxies file ({}): {}",
+            Err(e) => return Err(format!("Failed to parse proxies file ({}): {}",
                                  proxies_file,
-                                 e.to_string()),
-        }
+                                 e.to_string())),
+        };
 
         Ok(ProxifyConfig {
             bind_addr: bind_addr,
             bind_port: bind_port,
             nr_of_proxies: nr_of_proxies,
+            proxies_list: proxies_list,
         })
     }
 
-    fn parse_proxies_file(proxies_file: String) -> Result<Vec<(String, String, u16)>, String> {
-        let list: Vec<(String, String, u16)> = Vec::new();
+    fn parse_proxies_file(proxies_file: &String) -> Result<Vec<(String, String, u16)>, String> {
+        let lines_string: String = match read_to_string(proxies_file) {
+            Ok(v) => v,
+            Err(e) => return Err(format!("Failed to read file '{}': {}", proxies_file, e)),
+        };
+        let lines: Vec<String> = lines_string.lines().map(String::from).collect();
+        let mut proxies: Vec<(String, String, u16)> = Vec::new();
 
-        
+        /* Example for a proxy url: "http://url.com:3128" */
+        for line in lines {
+            /* Split "http" and "url.com:3128" */
+            let (prot, url_port) = match line.split_once("://") {
+                Some((p, up)) => (p.to_string(), up),
+                None => return Err(format!("Failed to parse proxy protocol from '{}'", line)),
+            };
+            /* Split "url.com" and "3128" */
+            let (url, port) = match url_port.split_once(':') {
+                Some((u, p)) => (u.to_string(), match p.parse::<u16>() {
+                                                    Ok(v) => v,
+                                                    Err(e) => return Err(format!("Failed to parse proxy port from '{}'", url_port)),
+                                                }),
+                None => return Err(format!("Failed to parse URL and port from '{}'", url_port)),
+            };
+            Spam!("Parsed proxy: '{}', '{}', '{}'", prot, url, port);
+            proxies.push((prot, url, port));
+        }
+        Ok(proxies)
     }
 }
