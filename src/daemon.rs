@@ -56,6 +56,8 @@ impl ProxifyDaemon {
             id += 1;
         }
 
+        Spam!("Successfully parsed {} proxies from the configuration", id);
+
         Ok(ProxifyDaemon {
             bind_addr: config.bind_addr,
             bind_port: config.bind_port,
@@ -110,7 +112,9 @@ impl ProxifyDaemon {
             }
             let mut proxy_guard = proxy_list.pop_front().unwrap();
             let mut proxy = proxy_guard.lock().unwrap();
-            proxy.prepare();
+            proxy.prepare()
+            // If it is prepared, add it to ready_proxies
+            // else push_back to notready_proxies
         }
     }
 
