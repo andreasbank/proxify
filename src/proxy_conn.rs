@@ -43,8 +43,9 @@ impl ProxyConn {
             *curl_init_done = true;
             Spam!("Initiating the cURL library");
             curl::init();
+        } else {
+            Spam!("cURL already initiated");
         }
-        Spam!("cURL already initiated");
     }
 
     pub fn prepare(&self) {

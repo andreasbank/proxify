@@ -16,17 +16,20 @@ use crate::config::ProxifyConfig;
 use crate::proxy_conn::ProxyConn;
 use crate::proxy_conn::ProxyConnProtocol;
 
+/* To clarify the following type alias:
+   A ref-counted thread-safe double-edge list containing ref-counted
+   thread-safe elements */
+type ThreadSafeList = ThreadSafeList;
+
 static MAGIC_BYTES: [u8; 4] = [ 0xAB, 0xBA, 0xAB, 0xBA ];
 
 pub struct ProxifyDaemon {
     bind_addr: String,
     bind_port: u16,
     nr_of_proxies: u8,
-    /* To clarify the following 3 variables: A ref-counted thread-safe list
-       containing ref-counted thread-safe elements */
-    notready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
-    ready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
-    inuse_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+    notready_proxies: ThreadSafeList,
+    ready_proxies: ThreadSafeList,
+    inuse_proxies: ThreadSafeList,
 }
 
 /* Destructor */
@@ -38,7 +41,7 @@ impl Drop for ProxifyDaemon {
 
 impl ProxifyDaemon {
     pub fn new(config: ProxifyConfig) -> Result<Self, String> {
-        let mut proxies_list: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>> =
+        let mut proxies_list: ThreadSafeList =
             Arc::new(Mutex::new(VecDeque::new()));
 
         let mut proxies_locked = proxies_list.lock().unwrap();
@@ -84,9 +87,9 @@ impl ProxifyDaemon {
     }
 
     /* Run in a separate thread */
-    pub fn prepare_proxies(notready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
-                           ready_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
-                           inuse_proxies: Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>,
+    pub fn prepare_proxies(notready_proxies: ThreadSafeList,
+                           ready_proxies: ThreadSafeList,
+                           inuse_proxies: ThreadSafeList,
                            exiting: Arc<AtomicBool>) {
         Detail!("Starting to prepare proxies");
         while !exiting.load(Ordering::Relaxed) {
