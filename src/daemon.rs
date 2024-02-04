@@ -7,6 +7,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream, Shutdown};
 use std::time::Duration;
 use std::collections::VecDeque;
+use std::str::FromStr;
 
 use proxify::common::verbose_print::VerbosityLevel;
 use proxify::{Error, Inform, Detail, Spam};
@@ -19,7 +20,7 @@ use crate::proxy_conn::ProxyConnProtocol;
 /* To clarify the following type alias:
    A ref-counted thread-safe double-edge list containing ref-counted
    thread-safe elements */
-type ThreadSafeList = ThreadSafeList;
+type ThreadSafeList = Arc<Mutex<VecDeque<Arc<Mutex<ProxyConn>>>>>;
 
 static MAGIC_BYTES: [u8; 4] = [ 0xAB, 0xBA, 0xAB, 0xBA ];
 
@@ -41,25 +42,25 @@ impl Drop for ProxifyDaemon {
 
 impl ProxifyDaemon {
     pub fn new(config: ProxifyConfig) -> Result<Self, String> {
-        let mut proxies_list: ThreadSafeList =
-            Arc::new(Mutex::new(VecDeque::new()));
+        let mut proxies_list: VecDeque<Arc<Mutex<ProxyConn>>> = VecDeque::new();
 
-        let mut proxies_locked = proxies_list.lock().unwrap();
-        //for p in config.proxies {
-            (*proxies_locked).push_back(Arc::new(Mutex::new(
-                ProxyConn::new(
-                    ProxyConnProtocol::HTTP,
-                    String::from("localhost"),
-                    80_u16,
-                )
+        let mut id = 0_u16;
+        for p in config.proxies_list {
+            let prot: ProxyConnProtocol = match p.0.parse() {
+                Ok(p) => p,
+                Err(e) => return Err(format!("Failed to parse protocol {}: {}", p.0, e.to_string())),
+            };
+            proxies_list.push_back(Arc::new(Mutex::new(
+                ProxyConn::new(id, p.0.parse().unwrap(), p.1, p.2)
             )));
-        //}
+            id += 1;
+        }
 
         Ok(ProxifyDaemon {
             bind_addr: config.bind_addr,
             bind_port: config.bind_port,
             nr_of_proxies: config.nr_of_proxies,
-            notready_proxies: Arc::new(Mutex::new(VecDeque::new())),
+            notready_proxies: Arc::new(Mutex::new(proxies_list)),
             ready_proxies: Arc::new(Mutex::new(VecDeque::new())),
             inuse_proxies: Arc::new(Mutex::new(VecDeque::new())),
         })
@@ -101,8 +102,15 @@ impl ProxifyDaemon {
                 then if nr_proxies not reached pop_first from notready, make ready
                 then push_back to ready_proxies
              */
-            
-            thread::sleep(Duration::from_secs(1));
+            let mut proxy_list = notready_proxies.lock().unwrap();
+            if proxy_list.is_empty() {
+                Spam!("No proxies to prepare, checking again in 1 second");
+                thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            let mut proxy_guard = proxy_list.pop_front().unwrap();
+            let mut proxy = proxy_guard.lock().unwrap();
+            proxy.prepare();
         }
     }
 
