@@ -1,4 +1,4 @@
-use curl::easy::Easy;
+use curl::easy::{Easy, Handler, WriteError};
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use std::str::FromStr;
@@ -58,7 +58,7 @@ pub struct ProxyConn {
     proxy_prot: ProxyConnProtocol,
     proxy_addr: String,
     proxy_port: u16,
-    curl_handle: Easy,
+    curl_handle: curl::easy::Easy,
     prepared: bool,
 }
 
@@ -78,6 +78,10 @@ impl ProxyConn {
         }
     }
 
+    pub fn get_id(&self) -> u16 {
+        self.id
+    }
+
     pub fn init_curl() {
         let mut curl_init_done = CURL_INIT_DONE.lock().unwrap();
         if !*curl_init_done {
@@ -89,17 +93,22 @@ impl ProxyConn {
         }
     }
 
-    pub fn prepare(&self) {
-        Spam!("one proxy preparing");
-        /*
-        // TODO: Add error handling to all unwraps
-        curl_handler.url("https://amazon.se/").unwrap();
-        curl_handler.write_function(|data| {
-            stdout().write_all(data).unwrap();
+    pub fn prepare(&mut self) -> Result<bool, String> {
+        Spam!("Proxy {} preparing", self.id);
+
+        if let Err(e) = self.curl_handle.url(Self::PREPARE_URL) {
+            return Err(format!("Failed to set URL for the cURL handler: {}", e.to_string()));
+        }
+
+        self.curl_handle.write_function(|data| {
+            Spam!("{:#?}", data);
             Ok(data.len())
         }).unwrap();
-        curl_handler.perform().unwrap();
-        */
+
+        match self.curl_handle.perform() {
+            Ok(v) => return Ok(true),
+            _ => return Ok(false),
+        }
     }
 }
 

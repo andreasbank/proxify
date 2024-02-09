@@ -89,7 +89,8 @@ impl ProxifyDaemon {
         Some(proxy)
     }
 
-    /* Run in a separate thread */
+    /* Run in a separate thread. This thread will run forever with no
+       interaction. It will exit if the argument "exiting" becomes True. */
     pub fn prepare_proxies(notready_proxies: ThreadSafeList,
                            ready_proxies: ThreadSafeList,
                            inuse_proxies: ThreadSafeList,
@@ -112,7 +113,9 @@ impl ProxifyDaemon {
             }
             let mut proxy_guard = proxy_list.pop_front().unwrap();
             let mut proxy = proxy_guard.lock().unwrap();
-            proxy.prepare()
+            if let Err(e) = proxy.prepare() {
+                Error!("Failed to prepare proxy {}", proxy.get_id());
+            }
             // If it is prepared, add it to ready_proxies
             // else push_back to notready_proxies
         }
