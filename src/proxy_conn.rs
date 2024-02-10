@@ -1,6 +1,7 @@
 use curl::easy::{Easy, Handler, WriteError};
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
+use std::str;
 use std::str::FromStr;
 use std::fmt;
 use proxify::common::verbose_print::VerbosityLevel;
@@ -82,6 +83,10 @@ impl ProxyConn {
         self.id
     }
 
+    pub fn is_prepared(&self) -> bool {
+        self.prepared
+    }
+
     pub fn init_curl() {
         let mut curl_init_done = CURL_INIT_DONE.lock().unwrap();
         if !*curl_init_done {
@@ -96,18 +101,46 @@ impl ProxyConn {
     pub fn prepare(&mut self) -> Result<bool, String> {
         Spam!("Proxy {} preparing", self.id);
 
-        if let Err(e) = self.curl_handle.url(Self::PREPARE_URL) {
-            return Err(format!("Failed to set URL for the cURL handler: {}", e.to_string()));
+        match self.request_get(&Self::PREPARE_URL.to_string(), &None) {
+            Ok(_) => Ok(true),
+            Err(e) if e.contains("timeout") => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+
+    // TODO: Add option for a timeout in seconds
+    pub fn request_get(&mut self, url: &String, _headers: &Option<Vec<String>>) -> Result<Vec<u8>, String> {
+        Spam!("Sending request using proxy {}", self.id);
+
+        if let Err(e) = self.curl_handle.url(url) {
+            return Err(format!("Failed to set URL {} for the cURL handler: {}",
+                               url,
+                               e.to_string()));
         }
 
-        self.curl_handle.write_function(|data| {
-            Spam!("{:#?}", data);
-            Ok(data.len())
-        }).unwrap();
+        // TODO: If headers are set, apply them to the handle
 
-        match self.curl_handle.perform() {
-            Ok(v) => return Ok(true),
-            _ => return Ok(false),
+        let mut data: Vec<u8> = Vec::new();
+        let mut transfer = self.curl_handle.transfer();
+        if let Err(e) = transfer.write_function(|recv_data| {
+            Spam!("{}", str::from_utf8(&recv_data).unwrap_or(&String::from_utf8_lossy(&recv_data)));
+            //data.extend_from_slice(recv_data);
+            Ok(recv_data.len())
+        }) {
+            return Err(format!("Failed to set write_function: {}", e.to_string()));
+        }
+
+        match transfer.perform() {
+            Ok(_) => return Ok(data),
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+
+    pub fn request_get_as_string(&mut self, url: &String, headers: &Option<Vec<String>>) -> Result<String, String> {
+        match self.request_get(url, headers) {
+            Ok(data) => Ok(String::from_utf8_lossy(&data).to_string()),
+            Err(e) => Err(e),
         }
     }
 }

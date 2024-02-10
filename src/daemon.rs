@@ -98,7 +98,7 @@ impl ProxifyDaemon {
         Detail!("Starting to prepare proxies");
         while !exiting.load(Ordering::Relaxed) {
             Spam!("In prepare proxy loop");
-            
+
             /*  TODO:
                 Process flow:
                 Loop inuse and try_lock, if success then push_back to unused
@@ -116,8 +116,16 @@ impl ProxifyDaemon {
             if let Err(e) = proxy.prepare() {
                 Error!("Failed to prepare proxy {}", proxy.get_id());
             }
-            // If it is prepared, add it to ready_proxies
-            // else push_back to notready_proxies
+
+            /* If it is prepared, add it to ready_proxies
+               else push_back to notready_proxies */
+            if proxy.is_prepared() {
+                Spam!("Proxu {} is now prepared", proxy.get_id());
+                /* Intentionally not handling the error since it should never
+                   happen */
+                // TODO: continue here!
+                //ready_proxies.lock().unwrap().push_back(proxy);
+            }
         }
     }
 
