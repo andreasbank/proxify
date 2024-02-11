@@ -99,19 +99,17 @@ impl ProxifyDaemon {
         while !exiting.load(Ordering::Relaxed) {
             Spam!("In prepare proxy loop");
 
-            /*  TODO:
-                Process flow:
-                Loop inuse and try_lock, if success then push_back to unused
-                then if nr_proxies not reached pop_first from notready, make ready
-                then push_back to ready_proxies
-             */
+            /* Process flow:
+               Loop inuse and try_lock, if success then push_back to unused
+               then if nr_proxies not reached pop_first from notready, make
+               ready then push_back to ready_proxies */
             let mut proxy_list = notready_proxies.lock().unwrap();
             if proxy_list.is_empty() {
                 Spam!("No proxies to prepare, checking again in 1 second");
                 thread::sleep(Duration::from_secs(1));
                 continue;
             }
-            let mut proxy_guard = proxy_list.pop_front().unwrap();
+            let proxy_guard = proxy_list.pop_front().unwrap();
             let mut proxy = proxy_guard.lock().unwrap();
             if let Err(e) = proxy.prepare() {
                 Error!("Failed to prepare proxy {}", proxy.get_id());
@@ -120,11 +118,15 @@ impl ProxifyDaemon {
             /* If it is prepared, add it to ready_proxies
                else push_back to notready_proxies */
             if proxy.is_prepared() {
-                Spam!("Proxu {} is now prepared", proxy.get_id());
+                Spam!("Proxy {} is now prepared", proxy.get_id());
                 /* Intentionally not handling the error since it should never
                    happen */
-                // TODO: continue here!
+                // TODO: Fix me
                 //ready_proxies.lock().unwrap().push_back(proxy);
+            } else {
+                Spam!("Proxy {} failed to prepare", proxy.get_id());
+                // TODO: Fix me
+                //notready_proxies.lock().unwrap().push_back(proxy);
             }
         }
     }

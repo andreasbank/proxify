@@ -1,5 +1,6 @@
 use curl::easy::{Easy, Handler, WriteError};
 use once_cell::sync::Lazy;
+use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::str;
 use std::str::FromStr;
@@ -59,7 +60,8 @@ pub struct ProxyConn {
     proxy_prot: ProxyConnProtocol,
     proxy_addr: String,
     proxy_port: u16,
-    curl_handle: curl::easy::Easy,
+    curl_handle: Easy,
+    recv_buf: Arc<Mutex<Vec<u8>>>,
     prepared: bool,
 }
 
@@ -75,6 +77,7 @@ impl ProxyConn {
             proxy_addr: addr,
             proxy_port: port,
             curl_handle: Easy::new(),
+            recv_buf: Arc::new(Mutex::new(Vec::new())),
             prepared: false
         }
     }
@@ -101,16 +104,18 @@ impl ProxyConn {
     pub fn prepare(&mut self) -> Result<bool, String> {
         Spam!("Proxy {} preparing", self.id);
 
-        match self.request_get(&Self::PREPARE_URL.to_string(), &None) {
+        match self.request_get(&Self::PREPARE_URL.to_string(), &None, 5) {
             Ok(_) => Ok(true),
-            Err(e) if e.contains("timeout") => Ok(false),
+            Err(e) if e.contains("timeout") => {
+                println!("Failed!!!!");
+                Ok(false)
+            }
             Err(e) => Err(e),
         }
     }
 
 
-    // TODO: Add option for a timeout in seconds
-    pub fn request_get(&mut self, url: &String, _headers: &Option<Vec<String>>) -> Result<Vec<u8>, String> {
+    pub fn request_get(&mut self, url: &String, _headers: &Option<Vec<String>>, timeout_sec: u16) -> Result<Vec<u8>, String> {
         Spam!("Sending request using proxy {}", self.id);
 
         if let Err(e) = self.curl_handle.url(url) {
@@ -120,25 +125,38 @@ impl ProxyConn {
         }
 
         // TODO: If headers are set, apply them to the handle
+        /*
+        use curl::easy::List;
+        let mut list = List::new();
+        list.append("Authorization: Basic QWxhaaRpbjpvcGVuIHNlc2FtZQ==").unwrap();
+        easy.http_headers(list).unwrap();
+        */
 
-        let mut data: Vec<u8> = Vec::new();
+        // TODO: Use option for timeout
+
+        let mut buf = Vec::new();
+        self.curl_handle.connect_timeout(Duration::from_secs(timeout_sec.into())).unwrap();
         let mut transfer = self.curl_handle.transfer();
         if let Err(e) = transfer.write_function(|recv_data| {
-            Spam!("{}", str::from_utf8(&recv_data).unwrap_or(&String::from_utf8_lossy(&recv_data)));
-            //data.extend_from_slice(recv_data);
+            buf.extend_from_slice(&recv_data);
             Ok(recv_data.len())
         }) {
             return Err(format!("Failed to set write_function: {}", e.to_string()));
         }
 
-        match transfer.perform() {
-            Ok(_) => return Ok(data),
-            Err(e) => return Err(e.to_string()),
+        if let Err(e) = transfer.perform() {
+            return Err(e.to_string());
         }
+        drop(transfer);
+
+        self.prepared = true;
+        Spam!("Data received:\n {}", str::from_utf8(&buf).unwrap());
+
+        Ok(buf)
     }
 
     pub fn request_get_as_string(&mut self, url: &String, headers: &Option<Vec<String>>) -> Result<String, String> {
-        match self.request_get(url, headers) {
+        match self.request_get(url, headers, 10) {
             Ok(data) => Ok(String::from_utf8_lossy(&data).to_string()),
             Err(e) => Err(e),
         }

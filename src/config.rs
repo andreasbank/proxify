@@ -119,7 +119,7 @@ impl<'a> ProxifyConfig {
             let (url, port) = match url_port.split_once(':') {
                 Some((u, p)) => (u.to_string(), match p.parse::<u16>() {
                                                     Ok(v) => v,
-                                                    Err(e) => return Err(format!("Failed to parse proxy port from '{}'", url_port)),
+                                                    Err(_) => return Err(format!("Failed to parse proxy port from '{}'", url_port)),
                                                 }),
                 None => return Err(format!("Failed to parse URL and port from '{}'", url_port)),
             };
