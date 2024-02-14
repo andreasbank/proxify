@@ -129,10 +129,8 @@ impl ProxyConn {
         use curl::easy::List;
         let mut list = List::new();
         list.append("Authorization: Basic QWxhaaRpbjpvcGVuIHNlc2FtZQ==").unwrap();
-        easy.http_headers(list).unwrap();
+        self.curl_handle.http_headers(list).unwrap();
         */
-
-        // TODO: Use option for timeout
 
         let mut buf = Vec::new();
         self.curl_handle.connect_timeout(Duration::from_secs(timeout_sec.into())).unwrap();
