@@ -124,7 +124,6 @@ impl ProxifyDaemon {
                 ready_guard.push_back(proxy_guard);
             } else {
                 Spam!("Proxy {} failed to prepare", proxy.get_id());
-                let mut notready_guard = notready_proxies.lock().unwrap();
                 drop(proxy);
                 notready_guard.push_back(proxy_guard);
             }
