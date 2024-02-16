@@ -107,7 +107,10 @@ impl ProxifyDaemon {
                 thread::sleep(Duration::from_secs(1));
                 continue;
             }
+
             let proxy_guard = notready_guard.pop_front().unwrap();
+            drop(notready_guard);
+
             let mut proxy = proxy_guard.lock().unwrap();
             if let Err(e) = proxy.prepare() {
                 Error!("Failed to prepare proxy {}", proxy.get_id());
@@ -125,6 +128,7 @@ impl ProxifyDaemon {
             } else {
                 Spam!("Proxy {} failed to prepare", proxy.get_id());
                 drop(proxy);
+                let mut notready_guard = notready_proxies.lock().unwrap();
                 notready_guard.push_back(proxy_guard);
             }
         }
