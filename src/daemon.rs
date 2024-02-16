@@ -28,6 +28,7 @@ pub struct ProxifyDaemon {
     bind_addr: String,
     bind_port: u16,
     nr_of_proxies: u8,
+    nr_of_prepare_threads: u8,
     notready_proxies: ThreadSafeList,
     ready_proxies: ThreadSafeList,
     inuse_proxies: ThreadSafeList,
@@ -62,6 +63,7 @@ impl ProxifyDaemon {
             bind_addr: config.bind_addr,
             bind_port: config.bind_port,
             nr_of_proxies: config.nr_of_proxies,
+            nr_of_prepare_threads: config.nr_of_prepare_threads,
             notready_proxies: Arc::new(Mutex::new(proxies_list)),
             ready_proxies: Arc::new(Mutex::new(VecDeque::new())),
             inuse_proxies: Arc::new(Mutex::new(VecDeque::new())),
@@ -91,11 +93,12 @@ impl ProxifyDaemon {
 
     /* Run in a separate thread. This thread will run forever with no
        interaction. It will exit if the argument "exiting" becomes True. */
-    pub fn prepare_proxies(notready_proxies: ThreadSafeList,
+    pub fn prepare_proxies(thread_nr: u8,
+                           notready_proxies: ThreadSafeList,
                            ready_proxies: ThreadSafeList,
                            inuse_proxies: ThreadSafeList,
                            exiting: Arc<AtomicBool>) {
-        Detail!("Starting to prepare proxies");
+        Detail!("Thread {} is starting to prepare proxies", thread_nr);
         while !exiting.load(Ordering::Relaxed) {
             /* Process flow:
                Loop inuse and try_lock, if success then push_back to unused
@@ -103,7 +106,8 @@ impl ProxifyDaemon {
                ready then push_back to ready_proxies */
             let mut notready_guard = notready_proxies.lock().unwrap();
             if notready_guard.is_empty() {
-                Spam!("No proxies to prepare, checking again in 1 second");
+                Spam!("[prepare thread {}] No proxies to prepare, checking again in 1 second", thread_nr);
+                drop(notready_guard);
                 thread::sleep(Duration::from_secs(1));
                 continue;
             }
@@ -113,43 +117,50 @@ impl ProxifyDaemon {
 
             let mut proxy = proxy_guard.lock().unwrap();
             if let Err(e) = proxy.prepare() {
-                Error!("Failed to prepare proxy {}", proxy.get_id());
+                Error!("[prepare thread {}] Failed to prepare proxy {}", thread_nr, proxy.get_id());
             }
 
             /* If it is prepared, add it to ready_proxies
                else push_back to notready_proxies */
             if proxy.is_prepared() {
-                Spam!("Proxy {} is now prepared", proxy.get_id());
+                Spam!("[prepare thread {}] Proxy {} is now prepared", thread_nr, proxy.get_id());
                 /* Intentionally not handling the error since it should never
                    happen */
                 let mut ready_guard = ready_proxies.lock().unwrap();
                 drop(proxy);
                 ready_guard.push_back(proxy_guard);
             } else {
-                Spam!("Proxy {} failed to prepare", proxy.get_id());
+                Spam!("[prepare thread {}] Proxy {} failed to prepare", thread_nr, proxy.get_id());
                 drop(proxy);
                 let mut notready_guard = notready_proxies.lock().unwrap();
                 notready_guard.push_back(proxy_guard);
             }
         }
+        Spam!("Thread {} is exiting", thread_nr);
     }
 
     pub fn start(&mut self, exiting: &Arc<AtomicBool>) -> std::io::Result<()>{
         let listener = TcpListener::bind((self.bind_addr.as_str(), self.bind_port)).unwrap();
         let nr_threads: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+        let mut prepare_threads: Vec<thread::JoinHandle<_>> = Vec::new();
 
-        /* Kick off a thread that will keep proxies prepared */
-        Detail!("Preparing {} number of proxies", self.nr_of_proxies);
-        let exiting_clone = exiting.clone();
-        let notready_proxies_clone = self.notready_proxies.clone();
-        let ready_proxies_clone = self.ready_proxies.clone();
-        let inuse_proxies_clone = self.inuse_proxies.clone();
-        let proxies_thread = thread::spawn(move || {
-            Self::prepare_proxies(notready_proxies_clone,
-                                  ready_proxies_clone,
-                                  inuse_proxies_clone,
-                                  exiting_clone);
-        });
+        /* Kick off a given number threads that will keep proxies prepared */
+        Detail!("Preparing {} number of proxies using {} threads", self.nr_of_proxies, self.nr_of_prepare_threads);
+        for thread_nr in 1..=self.nr_of_prepare_threads {
+            let exiting_clone = exiting.clone();
+            let notready_proxies_clone = self.notready_proxies.clone();
+            let ready_proxies_clone = self.ready_proxies.clone();
+            let inuse_proxies_clone = self.inuse_proxies.clone();
+            Spam!("Starting prepare thread {}", thread_nr);
+            prepare_threads.push(thread::spawn(move || {
+                Self::prepare_proxies(thread_nr,
+                                      notready_proxies_clone,
+                                      ready_proxies_clone,
+                                      inuse_proxies_clone,
+                                      exiting_clone);
+                })
+            )
+        }
 
         /* More on a proper implementation of TcpListener::incoming():
            https://stackoverflow.com/questions/56692961/graceful-exit-tcplistener-incoming */
@@ -178,7 +189,14 @@ impl ProxifyDaemon {
                 }
             }
         }
-        proxies_thread.join().unwrap();
+
+        /* Wait for all prepare threads to finish */
+        let mut threads_left = self.nr_of_prepare_threads;
+        for pt in prepare_threads {
+            Spam!("Waiting for {} prepare thread(s) to join", threads_left);
+            pt.join().unwrap();
+            threads_left -= 1;
+        }
         Ok(())
     }
 

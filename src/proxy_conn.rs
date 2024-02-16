@@ -155,7 +155,7 @@ impl ProxyConn {
         drop(transfer);
 
         self.prepared = true;
-        Spam!("Data received:\n {}", str::from_utf8(&buf).unwrap());
+        //Spam!("Data received:\n {}", str::from_utf8(&buf).unwrap());
 
         Ok(buf)
     }

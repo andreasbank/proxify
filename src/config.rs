@@ -7,13 +7,16 @@ use crate::VERBOSITY;
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1";
 const DEFAULT_BIND_PORT: u16 = 65432_u16;
 const DEFAULT_NR_PROXIES: u8 = 20_u8;
+const DEFAULT_NR_PREPARE_THREADS: u8 = 1_u8;
 const MIN_NR_PROXIES: u8 = 2_u8;
 const MAX_NR_PROXIES: u8 = 50_u8;
+const MAX_NR_PREPARE_THREADS: u8 = 50_u8;
 
 pub struct ProxifyConfig {
     pub bind_addr: String,
     pub bind_port: u16,
     pub nr_of_proxies: u8,
+    pub nr_of_prepare_threads: u8,
     pub proxies_list: Vec<(String, String, u16)>,
 }
 
@@ -72,6 +75,13 @@ impl<'a> ProxifyConfig {
             .unwrap_or("proxies.json")
             .to_string();
 
+        let nr_of_prepare_threads = match Self::get_value_from_key(&pairs, "nr_prepare_threads") {
+            Some(v) => match v.to_string().trim().parse::<u8>() {
+                Ok(v) => v,
+                Err(_) => 0
+            }
+            None => DEFAULT_NR_PREPARE_THREADS
+        };
 
         if !validate_ip_address(&bind_addr) {
             return Err(String::from("Invalid IP address"));
@@ -82,7 +92,11 @@ impl<'a> ProxifyConfig {
         }
 
         if nr_of_proxies < 1 || nr_of_proxies > MAX_NR_PROXIES {
-            return Err(String::from("Invalid nr_of_proxies"));
+            return Err(String::from("Invalid nr_proxies"));
+        }
+
+        if nr_of_prepare_threads > MAX_NR_PREPARE_THREADS {
+            return Err(String::from("Invalid nr_prepare_threads"));
         }
 
         let proxies_list = match Self::parse_proxies_file(&proxies_file) {
@@ -96,6 +110,7 @@ impl<'a> ProxifyConfig {
             bind_addr: bind_addr,
             bind_port: bind_port,
             nr_of_proxies: nr_of_proxies,
+            nr_of_prepare_threads: nr_of_prepare_threads,
             proxies_list: proxies_list,
         })
     }
