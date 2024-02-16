@@ -1,4 +1,4 @@
-use curl::easy::{Easy, Handler, WriteError};
+use curl::easy::{Easy, Handler, List, WriteError};
 use once_cell::sync::Lazy;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
@@ -115,7 +115,7 @@ impl ProxyConn {
     }
 
 
-    pub fn request_get(&mut self, url: &String, _headers: &Option<Vec<String>>, timeout_sec: u16) -> Result<Vec<u8>, String> {
+    pub fn request_get(&mut self, url: &String, headers: &Option<Vec<String>>, timeout_sec: u16) -> Result<Vec<u8>, String> {
         Spam!("Sending request using proxy {}", self.id);
 
         if let Err(e) = self.curl_handle.url(url) {
@@ -124,16 +124,20 @@ impl ProxyConn {
                                e.to_string()));
         }
 
-        // TODO: If headers are set, apply them to the handle
-        /*
-        use curl::easy::List;
-        let mut list = List::new();
-        list.append("Authorization: Basic QWxhaaRpbjpvcGVuIHNlc2FtZQ==").unwrap();
-        self.curl_handle.http_headers(list).unwrap();
-        */
+        /* If headers are set, apply them to the handle */
+        if let Some(hdrs) = headers {
+            let mut list = List::new();
+            for h in hdrs {
+                list.append(h).unwrap();
+            }
+            self.curl_handle.http_headers(list).unwrap();
+        }
 
+        /* Set the timeout for the connect operation */
         let mut buf = Vec::new();
         self.curl_handle.connect_timeout(Duration::from_secs(timeout_sec.into())).unwrap();
+
+        /* Set the receiving closure */
         let mut transfer = self.curl_handle.transfer();
         if let Err(e) = transfer.write_function(|recv_data| {
             buf.extend_from_slice(&recv_data);
@@ -142,9 +146,12 @@ impl ProxyConn {
             return Err(format!("Failed to set write_function: {}", e.to_string()));
         }
 
+        /* Do the request */
         if let Err(e) = transfer.perform() {
             return Err(e.to_string());
         }
+
+        /* We need to drop the transfer to let go of the borrowed buffer */
         drop(transfer);
 
         self.prepared = true;
