@@ -16,6 +16,7 @@ use crate::VERBOSITY;
 use crate::config::ProxifyConfig;
 use crate::proxy_conn::ProxyConn;
 use crate::proxy_conn::ProxyConnProtocol;
+use crate::proxify_data::{ProxifyCommand, ProxifyData};
 
 /* To clarify the following type alias:
    A ref-counted thread-safe double-edge list containing ref-counted

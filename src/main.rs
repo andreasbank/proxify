@@ -13,6 +13,7 @@ use daemon::ProxifyDaemon;
 mod config;
 use config::ProxifyConfig;
 mod proxy_conn;
+mod proxify_data;
 
 static VERBOSITY: Lazy<Mutex<Verbosity>> = Lazy::new(|| Mutex::new(Verbosity::new()));
 static EXITING: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
