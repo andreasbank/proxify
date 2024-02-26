@@ -33,42 +33,55 @@ impl TryFrom<u8> for ProxifyDataType {
 pub struct ProxifyData {
     session: u8,
     command: ProxifyCommand,
-    data: Vec<u8>,
+    data: Vec<(ProxifyDataType, u8, Vec<u8>)>,
 }
 
 impl ProxifyData {
     pub fn unmarshal_bytes(data: Vec<u8>) -> Result<Self, String> {
+        // TODO: Finish below
+        let parsed_data = match ProxifyData::parse_tlvs(data) {
+            Ok(pd) => pd,
+            Err(e) => return Err(e),
+        };
+
         // TODO fix this when all tlv parsing works
         Ok(ProxifyData {
             session: 1_u8,
             command: ProxifyCommand::REQUEST_GET,
-            data: vec!(1_u8, 2_u8),
+            data: vec!((ProxifyDataType::DATA, 1_u8, vec!(2_u8))),
         })
     }
 
     fn parse_tlvs(data: Vec<u8>) -> Result<Vec<(ProxifyDataType, u8, Vec<u8>)>, String> {
         let mut tlvs: Vec<(ProxifyDataType, u8, Vec<u8>)> = Vec::new();
-
         let mut begin = 0;
         let end = data.len();
+
         loop {
             if begin + 3 < end { break; }
 
-            let tlv_type: ProxifyDataType = match data[0].try_into() {
+            let tlv_type: ProxifyDataType = match data[begin].try_into() {
                 Ok(ProxifyDataType::URL) => ProxifyDataType::URL,
                 Ok(ProxifyDataType::HEADER) => ProxifyDataType::HEADER,
                 Ok(ProxifyDataType::DATA) => ProxifyDataType::DATA,
                 Err(_) => return Err(String::from("Invalid u8 for ProdyDataType")),
             };
-            let tlv_length: u8 = data[1];
-            let mut tlv_value: Vec<u8> = Vec::new();
 
-            for value in data.clone().into_iter().skip(2) {
-                tlv_value.push(value);
+            let tlv_length: u8 = data[begin + 1];
+
+            if begin + 3  + (tlv_length as usize) < end {
+                return Err(format!("Invalid TLV found, not enough data (need {}, found {})",
+                                   tlv_length,
+                                   end - begin + 3));
             }
 
+            let mut tlv_value: Vec<u8> = Vec::new();
+
+            tlv_value.extend_from_slice(&data[(begin + 2)..(tlv_length as usize)]);
             tlvs.push((tlv_type, tlv_length, tlv_value));
-            begin += 3;
+
+            // For every loop we move one TLV forward (T, L and D[size])
+            begin += 2 + (tlv_length as usize);
         }
         Ok(tlvs)
     }
