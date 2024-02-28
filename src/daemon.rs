@@ -16,7 +16,7 @@ use crate::VERBOSITY;
 use crate::config::ProxifyConfig;
 use crate::proxy_conn::ProxyConn;
 use crate::proxy_conn::ProxyConnProtocol;
-use crate::proxify_data::{ProxifyCommand, ProxifyData};
+use crate::proxify_data::{ProxifyCommand, ProxifyDataType, ProxifyData};
 
 /* To clarify the following type alias:
    A ref-counted thread-safe double-edge list containing ref-counted
@@ -236,11 +236,30 @@ impl ProxifyDaemon {
                     Detail!("Sending data back");
                     stream.write(&data[4..size]).unwrap();
 
-                    // TODO: parse proxify data struct
+                    // TODO: remove test data
+                    let fake_data: Vec<u8> = vec!(1_u8,
+                                                  ProxifyCommand::REQUEST_POST as u8,
+                                                  ProxifyDataType::URL as u8,
+                                                  8_u8,
+                                                  'z' as u8,
+                                                  'e' as u8,
+                                                  'l' as u8,
+                                                  'd' as u8,
+                                                  'a' as u8,
+                                                  'b' as u8,
+                                                  'a' as u8,
+                                                  'n' as u8);
+                    let parsed_data = match ProxifyData::unmarshal_bytes(fake_data) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            Error!("Received invalid data from client: {}", e.to_string());
+                            break;
+                        },
+                    };
+                    Spam!("dummy request command u8 is {}", parsed_data.command as u8);
                     // TODO: if command is do_request with new session, get new proxy
                     // TODO: do request with given data
                     // TODO: write back data to stream
-
                 },
 
                 /* If we received 0 bytes, we're done */
