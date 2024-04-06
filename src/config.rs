@@ -1,8 +1,7 @@
 use std::fs::read_to_string;
 use proxify::common::utils::{validate_ip_address, validate_port};
 use proxify::{Error, Inform, Detail, Spam};
-use proxify::common::verbose_print::VerbosityLevel;
-use crate::VERBOSITY;
+use proxify::common::verbose_print::{VERBOSITY, VerbosityLevel};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1";
 const DEFAULT_BIND_PORT: u16 = 65432_u16;

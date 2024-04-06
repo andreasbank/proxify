@@ -9,10 +9,9 @@ use std::time::Duration;
 use std::collections::VecDeque;
 use std::str::FromStr;
 
-use proxify::common::verbose_print::VerbosityLevel;
+use proxify::common::verbose_print::{VERBOSITY, VerbosityLevel};
 use proxify::{Error, Inform, Detail, Spam};
 use proxify::common::utils::encode_hex;
-use crate::VERBOSITY;
 use crate::config::ProxifyConfig;
 use crate::proxy_conn::ProxyConn;
 use crate::proxy_conn::ProxyConnProtocol;

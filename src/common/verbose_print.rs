@@ -17,6 +17,11 @@ Spam("This text will be printed  only for VerbosityLevel::Spam");
 */
 
 use std::fmt;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use once_cell::sync::Lazy;
+
+pub static VERBOSITY: Lazy<Mutex<Verbosity>> = Lazy::new(|| Mutex::new(Verbosity::new()));
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum VerbosityLevel {

@@ -6,8 +6,8 @@ use clap::{arg, command};
 use once_cell::sync::Lazy;
 use ctrlc;
 
-use proxify::common::verbose_print::{VerbosityLevel, Verbosity};
-use proxify::{Error, Inform, Detail, Spam};
+mod common;
+use common::verbose_print::{VERBOSITY, VerbosityLevel, Verbosity};
 mod daemon;
 use daemon::ProxifyDaemon;
 mod config;
@@ -15,7 +15,6 @@ use config::ProxifyConfig;
 mod proxy_conn;
 mod proxify_data;
 
-static VERBOSITY: Lazy<Mutex<Verbosity>> = Lazy::new(|| Mutex::new(Verbosity::new()));
 static EXITING: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
 
 fn main() -> Result<(), Box<dyn Error>> {
