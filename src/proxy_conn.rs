@@ -1,15 +1,13 @@
 use curl::easy::{Easy, Handler, List, WriteError};
-use once_cell::sync::Lazy;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use std::str;
 use std::str::FromStr;
 use std::fmt;
 
 use crate::common::verbose_print::{VERBOSITY, VerbosityLevel};
 use crate::{Error, Inform, Detail, Spam};
-
-static CURL_INIT_DONE: Lazy<Arc<Mutex<bool>>> = Lazy::new(|| Arc::new(Mutex::new(false)));
 
 pub enum ProxyConnProtocol {
     HTTP,
@@ -91,9 +89,9 @@ impl ProxyConn {
     }
 
     pub fn init_curl() {
-        let mut curl_init_done = CURL_INIT_DONE.lock().unwrap();
-        if !*curl_init_done {
-            *curl_init_done = true;
+        static CURL_INIT_DONE: AtomicBool = AtomicBool::new(false);
+        if !CURL_INIT_DONE.load(Ordering::Relaxed) {
+            CURL_INIT_DONE.store(true, Ordering::Relaxed);
             Spam!("Initiating the cURL library");
             curl::init();
         } else {
