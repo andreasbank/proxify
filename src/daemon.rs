@@ -9,9 +9,10 @@ use std::time::Duration;
 use std::collections::VecDeque;
 use std::str::FromStr;
 
-use proxify::common::verbose_print::{VERBOSITY, VerbosityLevel};
-use proxify::{Error, Inform, Detail, Spam};
-use proxify::common::utils::encode_hex;
+use crate::common::VERBOSITY;
+use crate::common::verbose_print::VerbosityLevel;
+use crate::{Error, Warn, Inform, Detail, Spam};
+use crate::common::utils::encode_hex;
 use crate::config::ProxifyConfig;
 use crate::proxy_conn::ProxyConn;
 use crate::proxy_conn::ProxyConnProtocol;
@@ -117,7 +118,7 @@ impl ProxifyDaemon {
 
             let mut proxy = proxy_guard.lock().unwrap();
             if let Err(e) = proxy.prepare() {
-                Error!("[prepare thread {}] Failed to prepare proxy {}", thread_nr, proxy.get_id());
+                Error!("[prepare thread {}] Failed to prepare proxy {}: {}", thread_nr, proxy.get_id(), e.to_string());
             }
 
             /* If it is prepared, add it to ready_proxies

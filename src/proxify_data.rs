@@ -3,8 +3,9 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 
 // TODO: remove logging when all works
-use crate::common::verbose_print::{VERBOSITY, VerbosityLevel};
-use crate::{Error, Inform, Detail, Spam};
+use crate::common::VERBOSITY;
+use crate::common::verbose_print::VerbosityLevel;
+use crate::{Error, Warn, Inform, Detail, Spam};
 
 pub enum ProxifyCommand {
     REQUEST_GET = 1,

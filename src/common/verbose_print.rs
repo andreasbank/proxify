@@ -6,7 +6,7 @@ use std::sync::{Mutex, Arc};
 // Create a global state wrapped in a Mutex
 static VERBOSITY: Mutex<Verbosity> = Mutex::new(Verbosity::new)));
 
-// Set the global state flag to  Errors (or any other VerbosityLevel)
+// Set the global state flag to Errors (or any other VerbosityLevel)
 VERBOSITY.lock().unwrap().set_value(VerbosityLevel::Errors);
 
 // Use these macro to conditionally print text depending on the VERBOSITY variable
@@ -17,16 +17,15 @@ Spam("This text will be printed  only for VerbosityLevel::Spam");
 */
 
 use std::fmt;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
-pub static VERBOSITY: Lazy<Mutex<Verbosity>> = Lazy::new(|| Mutex::new(Verbosity::new()));
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum VerbosityLevel {
     Quiet,
     Errors,
+    Warnings,
     Informative,
     Detailed,
     Spam
@@ -68,6 +67,20 @@ macro_rules! Error {
         {
             // Check the global state
             if VERBOSITY.lock().unwrap().is_atleast_level(VerbosityLevel::Errors) {
+                print!("[Error] ");
+                eprintln!($($arg)*);
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! Warn{
+    ($($arg:tt)*) => {
+        {
+            // Check the global state
+            if VERBOSITY.lock().unwrap().is_atleast_level(VerbosityLevel::Warnings) {
+                print!("[Warn] ");
                 println!($($arg)*);
             }
         }
@@ -80,6 +93,7 @@ macro_rules! Inform {
         {
             // Check the global state
             if VERBOSITY.lock().unwrap().is_atleast_level(VerbosityLevel::Informative) {
+                print!("[Inform] ");
                 println!($($arg)*);
             }
         }
@@ -92,6 +106,7 @@ macro_rules! Detail {
         {
             // Check the global state
             if VERBOSITY.lock().unwrap().is_atleast_level(VerbosityLevel::Detailed) {
+                print!("[Detail] ");
                 println!($($arg)*);
             }
         }
@@ -104,6 +119,7 @@ macro_rules! Spam {
         {
             // Check the global state
             if VERBOSITY.lock().unwrap().is_atleast_level(VerbosityLevel::Spam) {
+                print!("[Spam] ");
                 println!($($arg)*);
             }
         }

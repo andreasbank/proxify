@@ -6,8 +6,9 @@ use std::str;
 use std::str::FromStr;
 use std::fmt;
 
-use crate::common::verbose_print::{VERBOSITY, VerbosityLevel};
-use crate::{Error, Inform, Detail, Spam};
+use crate::common::VERBOSITY;
+use crate::common::verbose_print::VerbosityLevel;
+use crate::{Error, Warn, Inform, Detail, Spam};
 
 pub enum ProxyConnProtocol {
     HTTP,

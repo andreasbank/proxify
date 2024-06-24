@@ -1,7 +1,8 @@
 use std::fs::read_to_string;
-use proxify::common::utils::{validate_ip_address, validate_port};
-use proxify::{Error, Inform, Detail, Spam};
-use proxify::common::verbose_print::{VERBOSITY, VerbosityLevel};
+use crate::common::utils::{validate_ip_address, validate_port};
+use crate::common::VERBOSITY;
+use crate::{Error, Warn, Inform, Detail, Spam};
+use crate::common::verbose_print::VerbosityLevel;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1";
 const DEFAULT_BIND_PORT: u16 = 65432_u16;
@@ -31,7 +32,7 @@ impl<'a> ProxifyConfig {
             Spam!("Found setting '{}'", setting);
             let (key, val) = setting.split_once('=').unwrap_or(("", ""));
             if key.is_empty() || val.is_empty() {
-                Spam!("Setting key or value is empty, skipping {}", setting);
+                Warn!("Setting key or value is empty, skipping {}", setting);
                 continue;
             }
             Spam!("Adding {} = {}", key, val);

@@ -7,7 +7,8 @@ use once_cell::sync::Lazy;
 use ctrlc;
 
 mod common;
-use common::verbose_print::{VERBOSITY, VerbosityLevel, Verbosity};
+use crate::common::VERBOSITY;
+use crate::common::verbose_print::VerbosityLevel;
 mod daemon;
 use daemon::ProxifyDaemon;
 mod config;

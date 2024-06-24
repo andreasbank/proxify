@@ -5,7 +5,7 @@ use std::str::from_utf8;
 use once_cell::sync::Lazy;
 
 use proxify::common::verbose_print::{VerbosityLevel, Verbosity};
-use proxify::{Error, Inform, Detail, Spam};
+use proxify::{Error, Warn, Inform, Detail, Spam};
 use proxify::proxy_conn::ProxyConn;
 use proxify::proxy_conn::ProxyConnProtocol;
 use proxify::proxify_data::{ProxifyCommand, ProxifyDataType, ProxifyData};
