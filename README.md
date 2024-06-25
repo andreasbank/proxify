@@ -19,3 +19,9 @@ struct ProxifyData {
 
 This is also an attempt by me to become more proficient at writing Rust code,
 so bare with me.
+
+Example commands to test the build:
+Server:
+cargo run -- --debug=4 --config="bind_addr=127.0.0.1;bind_port=65432;proxies_file=proxies.json;nr_prepare_threads=5"
+Client:
+cargo run --example test_client

@@ -56,7 +56,7 @@ pub struct ProxifyData {
 }
 
 impl ProxifyData {
-    pub fn unmarshal_bytes(data: Vec<u8>) -> Result<Self, String> {
+    pub fn unmarshal_bytes(data: &[u8]) -> Result<Self, String> {
         let session = data[0];
         let command: ProxifyCommand = match data[1].try_into() {
             Ok(enum_val) => enum_val,
@@ -80,14 +80,17 @@ impl ProxifyData {
         let end = data.len();
 
         loop {
+            Spam!("*** loop, begin at {}, end at {}", begin, end);
             if begin + 3 > end { break; }
 
+            Spam!("*** loop, try_into {}", data[begin]);
             let tlv_type: ProxifyDataType = match data[begin].try_into() {
                 Ok(enum_val) => enum_val,
-                Err(_) => return Err(String::from("Invalid u8 for ProdyDataType")),
+                Err(_) => return Err(String::from("Invalid u8 for ProxyDataType")),
             };
 
             let tlv_length: u8 = data[begin + 1];
+            Spam!("*** loop, tlv_length {}", tlv_length);
 
             if begin + 2 + (tlv_length as usize) > end {
                 return Err(format!("Invalid TLV found, not enough data (need {}, found {})",
@@ -104,7 +107,11 @@ impl ProxifyData {
 
             // For every loop we move one TLV forward (T, L and D[size])
             begin += 2 + (tlv_length as usize);
+            if begin >= end {
+                break;
+            }
         }
+        Spam!("**** loop, done");
         Ok(tlvs)
     }
 }

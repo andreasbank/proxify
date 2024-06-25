@@ -211,19 +211,23 @@ impl ProxifyDaemon {
 
     fn handle_accept(mut stream: TcpStream, exiting: Arc<AtomicBool>, nr_threads: Arc<Mutex<i32>>) {
         let mut authenticated = false;
-        let mut data = [0 as u8; 1024];
+        let mut recv_data = [0 as u8; 1024];
 
         Detail!("Thread {} is running", nr_threads.lock().unwrap());
 
         while !exiting.load(Ordering::Relaxed) {
-            match stream.read(&mut data) {
+            match stream.read(&mut recv_data) {
                 Ok(size) if size > 0 => {
                     /* Check for the magic bytes */
                     if !authenticated {
-                        match Self::authenticate(&data[0..MAGIC_BYTES.len()]) {
+                        match Self::authenticate(&recv_data[0..MAGIC_BYTES.len()]) {
                             Ok(_) => {
                                 authenticated = true;
                                 Inform!("Authentication successful");
+                                /* echo the data */
+                                Detail!("Sending magic data back");
+                                stream.write(&recv_data[0..MAGIC_BYTES.len()]).unwrap();
+                                continue;
                             }
                             Err(errstr) => {
                                 Error!("Failed to authenticate: {}", errstr);
@@ -232,31 +236,28 @@ impl ProxifyDaemon {
                         }
                     }
 
-                    /* echo the data */
-                    Detail!("Sending data back");
-                    stream.write(&data[4..size]).unwrap();
-
-                    // TODO: remove test data
-                    let fake_data: Vec<u8> = vec!(1_u8,
-                                                  ProxifyCommand::REQUEST_POST as u8,
-                                                  ProxifyDataType::URL as u8,
-                                                  8_u8,
-                                                  'z' as u8,
-                                                  'e' as u8,
-                                                  'l' as u8,
-                                                  'd' as u8,
-                                                  'a' as u8,
-                                                  'b' as u8,
-                                                  'a' as u8,
-                                                  'n' as u8);
-                    let parsed_data = match ProxifyData::unmarshal_bytes(fake_data) {
+                    /* Expect a command from the client */
+                    Detail!("Received data from client");
+                    let parsed_data = match ProxifyData::unmarshal_bytes(&recv_data[0..size]) {
                         Ok(d) => d,
                         Err(e) => {
                             Error!("Received invalid data from client: {}", e.to_string());
                             break;
                         },
                     };
-                    Spam!("dummy request command u8 is {}", parsed_data.command as u8);
+                    //Spam!("dummy request command u8 is {}", &parsed_data.command as u8);
+                    match parsed_data.command {
+                        ProxifyCommand::REQUEST_GET => {
+                            Detail!("Processing command REQUEST_GET");
+                        },
+                        ProxifyCommand::REQUEST_POST => {
+                            Detail!("Processing command REQUEST_POST");
+                        },
+                        ProxifyCommand::END_SESSION => {
+                            Detail!("Processing command END_SESSION");
+                            break;
+                        },
+                    };
                     // TODO: if command is do_request with new session, get new proxy
                     // TODO: do request with given data
                     // TODO: write back data to stream
