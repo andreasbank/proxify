@@ -67,7 +67,7 @@ macro_rules! Error {
         {
             // Check the global state
             if VERBOSITY.lock().unwrap().is_atleast_level(VerbosityLevel::Errors) {
-                print!("[Error] ");
+                eprint!("[Error] ");
                 eprintln!($($arg)*);
             }
         }
