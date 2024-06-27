@@ -43,7 +43,7 @@ fn main() {
             /* Ask the proxify daemon to make a request to http://google.com */
             let mut send_data = String::from("http://google.com").into_bytes();
             let mut test_command: Vec<u8> = vec!(1_u8,
-                                                 ProxifyCommand::REQUEST_POST as u8,
+                                                 ProxifyCommand::REQUEST_GET as u8,
                                                  ProxifyDataType::URL as u8,
                                                  send_data.len() as u8);
             test_command.append(&mut send_data);

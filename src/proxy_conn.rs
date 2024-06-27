@@ -1,4 +1,5 @@
 use curl::easy::{Easy, Handler, List, WriteError};
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -103,7 +104,10 @@ impl ProxyConn {
     pub fn prepare(&mut self) -> Result<bool, String> {
         Spam!("Proxy {} preparing", self.id);
 
-        match self.request_get(&Self::PREPARE_URL.to_string(), &None, 5) {
+        match self.request_get(&Self::PREPARE_URL.to_string(),
+                               &None,
+                               5,
+                               None) {
             Ok(_) => Ok(true),
             Err(e) if e.contains("timeout") => {
                 println!("Failed!!!!");
@@ -114,7 +118,10 @@ impl ProxyConn {
     }
 
 
-    pub fn request_get(&mut self, url: &String, headers: &Option<Vec<String>>, timeout_sec: u16) -> Result<Vec<u8>, String> {
+    pub fn request_get(&mut self, url: &String,
+                       headers: &Option<Vec<String>>,
+                       timeout_sec: u16,
+                       mut send_data: Option<&[u8]>) -> Result<Vec<u8>, String> {
         Spam!("Sending request using proxy {}", self.id);
 
         if let Err(e) = self.curl_handle.url(url) {
@@ -136,8 +143,18 @@ impl ProxyConn {
         let mut buf = Vec::new();
         self.curl_handle.connect_timeout(Duration::from_secs(timeout_sec.into())).unwrap();
 
-        /* Set the receiving closure */
         let mut transfer = self.curl_handle.transfer();
+
+        /* Set the sending closure */
+        if let Some(mut snd_data) = send_data {
+            if let Err(e) = transfer.read_function(move |into| {
+                Ok(snd_data.read(into).unwrap())
+            }) {
+                return Err(format!("Failed to set write_function: {}", e.to_string()));
+            }
+        }
+
+        /* Set the receiving closure */
         if let Err(e) = transfer.write_function(|recv_data| {
             buf.extend_from_slice(&recv_data);
             Ok(recv_data.len())
@@ -159,8 +176,10 @@ impl ProxyConn {
         Ok(buf)
     }
 
-    pub fn request_get_as_string(&mut self, url: &String, headers: &Option<Vec<String>>) -> Result<String, String> {
-        match self.request_get(url, headers, 10) {
+    pub fn request_get_as_string(&mut self, url: &String,
+                                 headers: &Option<Vec<String>>,
+                                 send_data: Option<&[u8]>) -> Result<String, String> {
+        match self.request_get(url, headers, 10, send_data) {
             Ok(data) => Ok(String::from_utf8_lossy(&data).to_string()),
             Err(e) => Err(e),
         }

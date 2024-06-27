@@ -11,8 +11,8 @@ use crate::common::VERBOSITY;
 use crate::common::verbose_print::VerbosityLevel;
 mod daemon;
 use daemon::ProxifyDaemon;
-mod config;
-use config::ProxifyConfig;
+mod proxify_config;
+use proxify_config::ProxifyConfig;
 mod proxy_conn;
 mod proxify_data;
 

@@ -13,7 +13,7 @@ use crate::common::VERBOSITY;
 use crate::common::verbose_print::VerbosityLevel;
 use crate::{Error, Warn, Inform, Detail, Spam};
 use crate::common::utils::encode_hex;
-use crate::config::ProxifyConfig;
+use crate::proxify_config::ProxifyConfig;
 use crate::proxy_conn::ProxyConn;
 use crate::proxy_conn::ProxyConnProtocol;
 use crate::proxify_data::{ProxifyCommand, ProxifyDataType, ProxifyData};
@@ -79,15 +79,16 @@ impl ProxifyDaemon {
         self.bind_port
     }
 
-    pub fn get_ready_proxy(&self) -> Option<Arc<Mutex<ProxyConn>>> {
-       let mut r_proxies = self.ready_proxies.lock().unwrap();
+    pub fn get_ready_proxy(ready_proxies: ThreadSafeList,
+                           inuse_proxies: ThreadSafeList) -> Option<Arc<Mutex<ProxyConn>>> {
+       let mut r_proxies = ready_proxies.lock().unwrap();
         if r_proxies.is_empty() {
             Inform!("No proxies are ready yet.");
             return None;
         }
         let proxy = r_proxies.pop_front().unwrap();
         drop(r_proxies); // Am I dropping the Mutex or the Arc<Mutex<VecDeque<...>>>?
-        let mut u_proxies = self.inuse_proxies.lock().unwrap();
+        let mut u_proxies = inuse_proxies.lock().unwrap();
         u_proxies.push_back(proxy.clone());
         Some(proxy)
     }
@@ -97,12 +98,11 @@ impl ProxifyDaemon {
     pub fn prepare_proxies(thread_nr: u8,
                            notready_proxies: ThreadSafeList,
                            ready_proxies: ThreadSafeList,
-                           inuse_proxies: ThreadSafeList,
                            exiting: Arc<AtomicBool>) {
         Detail!("Thread {} is starting to prepare proxies", thread_nr);
         while !exiting.load(Ordering::Relaxed) {
             /* Process flow:
-               Loop inuse and try_lock, if success then push_back to unused
+               (TODO: Loop inuse and try_lock, if success then push_back to unused)
                then if nr_proxies not reached pop_first from notready, make
                ready then push_back to ready_proxies */
             let mut notready_guard = notready_proxies.lock().unwrap();
@@ -151,13 +151,11 @@ impl ProxifyDaemon {
             let exiting_clone = exiting.clone();
             let notready_proxies_clone = self.notready_proxies.clone();
             let ready_proxies_clone = self.ready_proxies.clone();
-            let inuse_proxies_clone = self.inuse_proxies.clone();
             Spam!("Starting prepare thread {}", thread_nr);
             prepare_threads.push(thread::spawn(move || {
                 Self::prepare_proxies(thread_nr,
                                       notready_proxies_clone,
                                       ready_proxies_clone,
-                                      inuse_proxies_clone,
                                       exiting_clone);
                 })
             )
@@ -180,9 +178,17 @@ impl ProxifyDaemon {
                     Inform!("Accepted connection from address {}", stream.peer_addr().unwrap());
                     let exiting_clone = exiting.clone();
                     let nr_threads_clone = nr_threads.clone();
+                    let notready_proxies_clone = self.notready_proxies.clone();
+                    let ready_proxies_clone = self.ready_proxies.clone();
+                    let inuse_proxies_clone = self.inuse_proxies.clone();
                     *nr_threads.lock().unwrap() += 1;
                     thread::spawn(move|| {
-                        Self::handle_accept(stream, exiting_clone, nr_threads_clone)
+                        Self::handle_accept(stream,
+                                            exiting_clone,
+                                            nr_threads_clone,
+                                            notready_proxies_clone,
+                                            ready_proxies_clone,
+                                            inuse_proxies_clone)
                     });
                 }
                 Err(e) => {
@@ -209,7 +215,13 @@ impl ProxifyDaemon {
         Err("Wrong magic bytes")
     }
 
-    fn handle_accept(mut stream: TcpStream, exiting: Arc<AtomicBool>, nr_threads: Arc<Mutex<i32>>) {
+    fn handle_accept(mut stream: TcpStream,
+                     exiting: Arc<AtomicBool>,
+                     nr_threads: Arc<Mutex<i32>>,
+                     notready_proxies: ThreadSafeList,
+                     ready_proxies: ThreadSafeList,
+                     inuse_proxies: ThreadSafeList,
+                     ) {
         let mut authenticated = false;
         let mut recv_data = [0 as u8; 1024];
 
@@ -245,10 +257,18 @@ impl ProxifyDaemon {
                             break;
                         },
                     };
-                    //Spam!("dummy request command u8 is {}", &parsed_data.command as u8);
+
+                    let ready_proxies_clone = ready_proxies.clone();
+                    let inuse_proxies_clone = inuse_proxies.clone();
+
                     match parsed_data.command {
                         ProxifyCommand::REQUEST_GET => {
                             Detail!("Processing command REQUEST_GET");
+                            let proxy = ProxifyDaemon::get_ready_proxy(
+                                ready_proxies_clone,
+                                inuse_proxies_clone
+                            );
+                            // TODO: Use proxy to send request!
                         },
                         ProxifyCommand::REQUEST_POST => {
                             Detail!("Processing command REQUEST_POST");
@@ -258,9 +278,6 @@ impl ProxifyDaemon {
                             break;
                         },
                     };
-                    // TODO: if command is do_request with new session, get new proxy
-                    // TODO: do request with given data
-                    // TODO: write back data to stream
                 },
 
                 /* If we received 0 bytes, we're done */
