@@ -17,7 +17,7 @@ pub struct ProxifyConfig {
     pub bind_port: u16,
     pub nr_of_proxies: u8,
     pub nr_of_prepare_threads: u8,
-    pub proxies_list: Vec<(String, String, u16)>,
+    pub proxies_list: Vec<(String, String, u16, Option<String>, Option<String>)>,
 }
 
 impl<'a> ProxifyConfig {
@@ -115,21 +115,40 @@ impl<'a> ProxifyConfig {
         })
     }
 
-    fn parse_proxies_file(proxies_file: &String) -> Result<Vec<(String, String, u16)>, String> {
+    fn parse_proxies_file(proxies_file: &String) ->
+        Result<Vec<(String, String, u16, Option<String>, Option<String>)>, String> {
         let lines_string: String = match read_to_string(proxies_file) {
             Ok(v) => v,
             Err(e) => return Err(format!("Failed to read file '{}': {}", proxies_file, e)),
         };
         let lines: Vec<String> = lines_string.lines().map(String::from).collect();
-        let mut proxies: Vec<(String, String, u16)> = Vec::new();
+        let mut proxies: Vec<(String, String, u16, Option<String>, Option<String>)> = Vec::new();
 
         /* Example for a proxy url: "http://url.com:3128" */
         for line in lines {
             /* Split "http" and "url.com:3128" */
-            let (prot, url_port) = match line.split_once("://") {
+            let (prot, uname_pass_url_port) = match line.split_once("://") {
                 Some((p, up)) => (p.to_string(), up),
                 None => return Err(format!("Failed to parse proxy protocol from '{}'", line)),
             };
+
+            /* Split "username[:password]@" and "url.com:3128" */
+            //TODO: ovaj
+            let (uname_pass, url_port) = match uname_pass_url_port.split_once('@') {
+                Some((unamepass, urlport)) => (Some(unamepass), urlport),
+                None => (None, uname_pass_url_port)
+            };
+
+            /* Split "username" and "password" */
+            let mut uname: Option<String> = None;
+            let mut pass: Option<String> = None;
+            if let Some(unamepass) = uname_pass {
+                (uname, pass) = match unamepass.split_once(':') {
+                    Some((u, p)) => (Some(u.to_string()), Some(p.to_string())),
+                    None => (Some(unamepass.to_string()), None)
+                };
+            }
+
             /* Split "url.com" and "3128" */
             let (url, port) = match url_port.split_once(':') {
                 Some((u, p)) => (u.to_string(), match p.parse::<u16>() {
@@ -139,7 +158,7 @@ impl<'a> ProxifyConfig {
                 None => return Err(format!("Failed to parse URL and port from '{}'", url_port)),
             };
             Spam!("Parsed proxy: '{}', '{}', '{}'", prot, url, port);
-            proxies.push((prot, url, port));
+            proxies.push((prot, url, port, uname, pass));
         }
         Ok(proxies)
     }

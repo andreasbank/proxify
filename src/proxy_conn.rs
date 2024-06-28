@@ -55,11 +55,25 @@ impl FromStr for ProxyConnProtocol {
     }
 }
 
+impl fmt::Display for ProxyConnProtocol {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.write_str(
+            match self {
+                ProxyConnProtocol::HTTP => "http",
+                ProxyConnProtocol::SOCKS4 => "socks4",
+                ProxyConnProtocol::SOCKS5 => "socks5",
+            }
+        )
+    }
+}
+
 pub struct ProxyConn {
     id: u16,
     proxy_prot: ProxyConnProtocol,
     proxy_addr: String,
     proxy_port: u16,
+    proxy_username: Option<String>,
+    proxy_password: Option<String>,
     curl_handle: Easy,
     recv_buf: Arc<Mutex<Vec<u8>>>,
     prepared: bool,
@@ -68,7 +82,12 @@ pub struct ProxyConn {
 impl ProxyConn {
     const PREPARE_URL: &'static str = "https://google.com";
 
-    pub fn new(id: u16, prot: ProxyConnProtocol, addr: String, port: u16) -> Self {
+    pub fn new(id: u16,
+               prot: ProxyConnProtocol,
+               addr: String,
+               port: u16,
+               username: Option<String>,
+               password: Option<String>) -> Self {
         Self::init_curl();
 
         Self {
@@ -76,6 +95,8 @@ impl ProxyConn {
             proxy_prot: prot,
             proxy_addr: addr,
             proxy_port: port,
+            proxy_username: username,
+            proxy_password: password,
             curl_handle: Easy::new(),
             recv_buf: Arc::new(Mutex::new(Vec::new())),
             prepared: false
@@ -117,8 +138,28 @@ impl ProxyConn {
         }
     }
 
+    fn generate_proxy_url(&self) -> String {
+        let mut credentials: String = String::new();
+        
+        if let Some(username) = &self.proxy_username {
+            credentials += username;
+            if let Some(password) = &self.proxy_password {
+                credentials += &format!(":{}", &password);
+            }
+        }
+        credentials += "@";
 
-    pub fn request_get(&mut self, url: &String,
+        let proxy_url: String = format!("{}://{}{}:{}",
+                               &self.proxy_prot,
+                               credentials,
+                               &self.proxy_addr,
+                               &self.proxy_port);
+        
+        proxy_url
+    }
+
+    pub fn request_get(&mut self,
+                       url: &String,
                        headers: &Option<Vec<String>>,
                        timeout_sec: u16,
                        mut send_data: Option<&[u8]>) -> Result<Vec<u8>, String> {
@@ -139,14 +180,22 @@ impl ProxyConn {
             self.curl_handle.http_headers(list).unwrap();
         }
 
-        /* Set the timeout for the connect operation */
         let mut buf = Vec::new();
+
+        /* Set the timeout for the connect operation */
         self.curl_handle.connect_timeout(Duration::from_secs(timeout_sec.into())).unwrap();
+
+        /* Set the poroxy to be used */
+        let proxy_url = self.generate_proxy_url();
+        if let Err(e) = self.curl_handle.proxy(proxy_url.as_str()) {
+                return Err(format!("Failed to setr proxy: {}", e.to_string()));
+        }
 
         let mut transfer = self.curl_handle.transfer();
 
         /* Set the sending closure */
         if let Some(mut snd_data) = send_data {
+            Spam!("Data to send:\n {}", str::from_utf8(&snd_data).unwrap());
             if let Err(e) = transfer.read_function(move |into| {
                 Ok(snd_data.read(into).unwrap())
             }) {
@@ -171,7 +220,7 @@ impl ProxyConn {
         drop(transfer);
 
         self.prepared = true;
-        //Spam!("Data received:\n {}", str::from_utf8(&buf).unwrap());
+        Spam!("Data received:\n {}", str::from_utf8(&buf).unwrap());
 
         Ok(buf)
     }

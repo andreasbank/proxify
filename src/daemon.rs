@@ -53,7 +53,12 @@ impl ProxifyDaemon {
                 Err(e) => return Err(format!("Failed to parse protocol {}: {}", p.0, e.to_string())),
             };
             proxies_list.push_back(Arc::new(Mutex::new(
-                ProxyConn::new(id, p.0.parse().unwrap(), p.1, p.2)
+                ProxyConn::new(id,
+                               p.0.parse().unwrap(),
+                               p.1,
+                               p.2,
+                               p.3,
+                               p.4)
             )));
             id += 1;
         }

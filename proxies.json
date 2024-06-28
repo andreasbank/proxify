@@ -1,7 +1,7 @@
-http://url1.com:3000
-socks4://url2.com:3001
-socks5://url3.com:3002
-http://url4.com:3003
-http://url5.com:3004
-socks5://url6.com:3005
-http://url7.com:3006
+http://u1:p1@url1.com:3000
+socks4://u2:p2@url2.com:3001
+socks5://u3:p3@url3.com:3002
+http://u4:p4@url4.com:3003
+http://u5:p5@url5.com:3004
+socks5://u6:p6@url6.com:3005
+http://u7:p7@url7.com:3006
