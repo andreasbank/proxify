@@ -157,7 +157,12 @@ impl<'a> ProxifyConfig {
                                                 }),
                 None => return Err(format!("Failed to parse URL and port from '{}'", url_port)),
             };
-            Spam!("Parsed proxy: '{}', '{}', '{}'", prot, url, port);
+            Spam!("Parsed proxy: '{}', '{}', '{}', '{}', '{}'",
+                  &prot,
+                  &url,
+                  &port,
+                  uname.clone().unwrap_or(String::from("(none)")),
+                  pass.clone().unwrap_or(String::from("(none)")));
             proxies.push((prot, url, port, uname, pass));
         }
         Ok(proxies)

@@ -146,15 +146,15 @@ impl ProxyConn {
             if let Some(password) = &self.proxy_password {
                 credentials += &format!(":{}", &password);
             }
+            credentials += "@";
         }
-        credentials += "@";
 
         let proxy_url: String = format!("{}://{}{}:{}",
                                &self.proxy_prot,
                                credentials,
                                &self.proxy_addr,
                                &self.proxy_port);
-        
+
         proxy_url
     }
 
@@ -162,7 +162,7 @@ impl ProxyConn {
                        url: &String,
                        headers: &Option<Vec<String>>,
                        timeout_sec: u16,
-                       mut send_data: Option<&[u8]>) -> Result<Vec<u8>, String> {
+                       send_data: Option<&[u8]>) -> Result<Vec<u8>, String> {
         Spam!("Sending request using proxy {}", self.id);
 
         if let Err(e) = self.curl_handle.url(url) {
@@ -190,6 +190,8 @@ impl ProxyConn {
         if let Err(e) = self.curl_handle.proxy(proxy_url.as_str()) {
                 return Err(format!("Failed to setr proxy: {}", e.to_string()));
         }
+
+        Detail!("Using proxy url '{}'", proxy_url);
 
         let mut transfer = self.curl_handle.transfer();
 
